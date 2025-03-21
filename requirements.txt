@@ -1,0 +1,12 @@
+transformers==4.48.2
+torch==2.4.0
+python-dotenv==1.0.1
+fastapi==0.115.6
+uvicorn==0.34.0
+peft==0.14.0
+pydantic==2.10.4
+selenium==4.29.0
+beautifulsoup4==4.13.3
+bcrypt==4.3.0
+email-validator>=2.0.0 
+fastapi-sessions==0.3.2

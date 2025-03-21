@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login</title>
+    <link rel="stylesheet" href="../static/css/index.css" />
+  </head>
+  <body>
+    <div class="image-container">
+      <div class="blurred-bg"></div>
+      <img
+        src="../static/img/Scrambled-eggs-with-whole-wheat-toast.jpg"
+        alt="FitFoodie"
+        width="700"
+        height="400"
+      />
+    </div>
+
+    <div class="container">
+      <div class="form-container">
+        <h2>Login</h2>
+
+        <form id="login-form">
+          <div class="input-group">
+            <label for="email">Email</label>
+            <input type="text" id="email" name="email" placeholder="&#x1F4E7;" required />
+          </div>
+          <div class="input-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" placeholder="&#x1F512;" required />
+          </div>
+          <button type="submit">Login</button>
+
+          <!-- Error Message Below Button -->
+          <div id="error-message" style="color: red; display: none; margin-top: 10px;"></div>
+        </form>
+
+        <p>Don't have an account? <a href="/register">Sign Up</a></p>
+      </div>
+    </div>
+
+    <script>
+      document.getElementById("login-form").addEventListener("submit", async function(event) {
+        event.preventDefault(); // Prevent form submission
+
+        // Get form values
+        const email = document.getElementById("email").value;
+        const password = document.getElementById("password").value;
+        const errorMessage = document.getElementById("error-message");
+
+        // Email validation using regex
+        const emailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+        if (!emailPattern.test(email)) {
+          errorMessage.textContent = "Invalid email format";
+          errorMessage.style.display = "block";
+          return;
+        }
+
+        // Create FormData object
+        const formData = new FormData();
+        formData.append("email", email);
+        formData.append("password", password);
+
+        // Send login request via AJAX
+        const response = await fetch("/", {
+          method: "POST",
+          body: formData
+        });
+
+        // Handle response
+        if (response.redirected) {
+          window.location.href = response.url; // Redirect on success
+        } else {
+          const result = await response.json();
+          errorMessage.textContent = result.error;
+          errorMessage.style.display = "block";
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <link rel="stylesheet" href="../static/css/dashboard.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .active { font-weight: bold; color: #ff7f50; } /* Highlight active tab */
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+      <header class="site-header">
+        <div class="logo">
+          <h1>FitFoodie</h1>
+        </div>
+        <nav class="main-nav">
+          <ul>
+            <li><a href="/dashboard" class="nav-link" id="nav-dashboard">Home</a></li>
+            <li><a href="/suggest-meal/" class="nav-link" id="nav-recommendation">Meal Suggestion</a></li>
+            <li><a href="/logout/" class="nav-link">Logout</a></li>
+          </ul>
+        </nav>
+        <p id="hello-user"></p>
+      </header>      
+
+        <section class="nutrition-summary">
+            <h2>Nutrition Summary</h2>
+            <div class="summary-item" id="nutrition-summary">
+                <!-- Nutrition data will be dynamically inserted here -->
+            </div>
+        </section>
+
+        <!-- Bar Chart for Macronutrients -->
+        <section class="macronutrients-chart">
+            <h2>Macronutrients</h2>
+            <canvas id="macroChart"></canvas>
+        </section>
+
+        <!-- Meal Table -->
+        <section class="meals-table">
+            <h2 class="meals-title">Meal History</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Meal Type</th>
+                        <th>Recommended Diet</th>
+                        <th>Calories (kcal)</th>
+                        <th>Protein (g)</th>
+                        <th>Carbohydrates (g)</th>
+                        <th>Fats (g)</th>
+                        <th>Fiber (g)</th>
+                    </tr>
+                </thead>
+                <tbody id="meals-table-body">
+                    <!-- Meals data will be inserted here dynamically -->
+                </tbody>
+            </table>
+        </section>
+    </div>
+
+    <script src="../static/js/dashboard.js"></script>
+</body>
+</html>
