@@ -7,24 +7,43 @@
     <link rel="stylesheet" href="../static/css/recommendation.css">
     <style>
         .active { font-weight: bold; color: #ff7f50; } /* Highlight active tab */
+        .meal-card {
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin: 10px;
+            text-align: center;
+            display: inline-block;
+            width: 45%;
+        }
+        .meal-card img {
+            width: 100%;
+            height: auto;
+        }
+        .log-meal-button {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 10px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
     <div class="dashboard-container">
-      <header class="site-header">
-        <div class="logo">
-          <h1>FitFoodie</h1>
-        </div>
-        <nav class="main-nav">
-          <ul>
-            <li><a href="/dashboard" class="nav-link" id="nav-dashboard">Home</a></li>
-            <li><a href="/suggest-meal/" class="nav-link" id="nav-recommendation">Meal Suggestion</a></li>
-            <li><a href="/logout/" class="nav-link">Logout</a></li>
-          </ul>
-        </nav>
-        <p id="hello-user"></p>
-      </header>
-      
+        <header class="site-header">
+            <div class="logo">
+                <h1>FitFoodie</h1>
+            </div>
+            <nav class="main-nav">
+                <ul>
+                    <li><a href="/dashboard" class="nav-link" id="nav-dashboard">Home</a></li>
+                    <li><a href="/suggest-meal/" class="nav-link" id="nav-recommendation">Meal Suggestion</a></li>
+                    <li><a href="/logout/" class="nav-link">Logout</a></li>
+                </ul>
+            </nav>
+            <p id="hello-user"></p>
+        </header>
 
         <div id="container">
             <div id="table-div">
@@ -56,28 +75,28 @@
                                     </select>
                                 </td>
                                 <td>
-                                    <input type="number" id="calorie-target" name="daily_calorie_target" placeholder="Enter daily calorie target">
+                                    <input type="number" id="calorie-target" name="daily_calorie_target" placeholder="Enter daily calorie target" required>
                                 </td>
                             </tr>
                         </tbody>
                     </table>
                     <section id="recomend-diet-button">
-                        <button type="submit" id="recommend-button">Recommend Diet</button>
+                        <button type="submit" id="recommend-button">Suggest Diet</button>
                     </section>    
                 </form>
             </div>
         </div>
+
         <!-- Loader -->
         <div id="loader" class="loader"></div>
+
+        <!-- New container for multiple meal options -->
         <section class="recipe" id="recommendation">
-            <h2 id="meal-name">Meal Name</h2>
-            <img src="../static/img/placeholder.png" alt="Meal Image" id="recommendation-image">
-            <p id="meal-info">Meal details will appear here.</p>
-            <section id="meal-logger">
-                <button class="log-meal-button" id="log-meal-button">Log Your Meal</button>
-            </section>
+            <h2>Suggested Meals</h2>
+            <div id="recommendation-container"></div>
         </section>
     </div>
+
     <script src="../static/js/recommendation.js"></script>
 </body>
 </html>

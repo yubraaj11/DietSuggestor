@@ -23,6 +23,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from database import get_db_connection
 from download_image import download_meal_image
+from utils import vegetarian_filter
 
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -103,32 +104,70 @@ def get_db():
     finally:
         conn.close()
 
-def generate_diet_prompt(user_request: UserInput) -> str:
+
+def generate_diet_prompt(user_request: UserInput, tokenizer = tokenizer) -> str:
     """
-    Generates a structured prompt for an AI nutrition expert to suggest a balanced meal plan.
+    Generates a structured prompt for an AI nutrition expert to suggest multiple balanced meal plans,
+    ensuring strict adherence to the user's dietary preference and returning only the required JSON.
     """
     
-    prompt = f"""<|im_start|>system
-        Act as a nutrition expert. Based on the user’s age, gender, height, weight, activity level, diet preference, and calorie target, 
-        suggest a balanced meal plan for a day only with breakfast, lunch, snacks, and dinner.Do consider users dietary preference and suggest me atleast 3 suggestions.<|im_end|>
+    system_prompt = """Act as a nutrition expert. Based on the user’s age, gender, height, weight, activity level, diet preference, and calorie target, 
+suggest at least three different balanced meal plans for a day. Each meal plan should include breakfast, lunch, snacks, and dinner.
 
-        <|im_start|>user
-        Age: {user_request.age}
-        Gender: {user_request.gender}
-        Height: {user_request.height} cm
-        Weight: {user_request.weight} kg
-        Activity Level: {user_request.activity_level}
-        **Dietary Preference: {user_request.diet_preference}**
-        Daily Calorie Target: {user_request.daily_calorie_target} kcal<|im_end|>
+**Important Guidelines:**
+- Only suggest meals that strictly follow the user's dietary preference. 
+- If the user is vegetarian, exclude all meat, poultry, fish, and seafood. 
+- If the user is vegan, exclude all animal products, including dairy and eggs.
+- If the user follows any other specific diet, adhere strictly to its rules.
+- Ensure that the total calorie count aligns with the daily calorie target.
 
-        <|im_start|>assistant
-        """
-    return prompt
+**Example response format:**
+```json
+{
+    "meal_plans": [
+        {
+            "breakfast": "Example breakfast",
+            "lunch": "Example lunch",
+            "snack": "Example snack",
+            "dinner": "Example dinner"
+        },
+        {
+            "breakfast": "Example breakfast 2",
+            "lunch": "Example lunch 2",
+            "snack": "Example snack 2",
+            "dinner": "Example dinner 2"
+        },
+        {
+            "breakfast": "Example breakfast 3",
+            "lunch": "Example lunch 3",
+            "snack": "Example snack 3",
+            "dinner": "Example dinner 3"
+        },
+    ]
+}
+```"""
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"""Age: {user_request.age}
+Gender: {user_request.gender}
+Height: {user_request.height} cm
+Weight: {user_request.weight} kg
+Activity Level: {user_request.activity_level}
+Dietary Preference: {user_request.diet_preference}
+Daily Calorie Target: {user_request.daily_calorie_target} kcal"""},
+    ]
+
+    chat_prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    
+    return chat_prompt
+
+
 
 
 def diet_via_time(tm: int):
     """Function to return meal type based on time of the day."""
-    if 5 <= tm < 10:
+    if 0 <= tm < 10:
         return 'breakfast'
     elif 10 <= tm < 14:
         return 'lunch'
@@ -191,7 +230,7 @@ def login(
             return JSONResponse(content={"error": "Invalid email or password"}, status_code=400)
         
         response = RedirectResponse(url='/dashboard', status_code=303)
-        response.set_cookie(key="user_id", value=user_id, max_age=600) 
+        response.set_cookie(key="user_id", value=user_id, max_age=1200) 
         logger.info("User logged in successfully")
         return response        
 
@@ -239,7 +278,6 @@ def register(
 
     return RedirectResponse(url="/", status_code=303)
 
-    
 @app.get("/suggest-meal/")
 def get_recommendation_template(request: Request):
     user_id = request.cookies.get("user_id")
@@ -249,7 +287,7 @@ def get_recommendation_template(request: Request):
     else:
         logger.warning("Unauthorized access attempt - no user_id found in cookies")
         return RedirectResponse(url="/", status_code=303)
-
+    
 @app.post("/suggest-meal/")
 def get_recommendation(
     request: Request,
@@ -260,11 +298,12 @@ def get_recommendation(
 ):
     try:
         logger.info("Received diet recommendation request")
+        logger.debug(f"Diet preference: {diet_preference}")
         
         user_id = request.cookies.get("user_id")
         if not user_id:
             logger.warning("Unauthorized access attempt - no user_id found in cookies")
-            raise HTTPException(status_code=401, detail="User not logged in")
+            return RedirectResponse(url="/", status_code=303)
 
         logger.debug(f"Fetching user details for user_id: {user_id}")
 
@@ -299,50 +338,89 @@ def get_recommendation(
 
         try:
             logger.debug("Tokenizing prompt...")
-            input_data = tokenizer(prompt, return_tensors="pt", padding=True, truncation=True).to(DEVICE)
+            input_data = tokenizer(prompt, return_tensors="pt", padding="longest", truncation=True).to(device=DEVICE)
         except Exception as e:
             logger.error(f"Tokenizer error: {e}")
             raise HTTPException(status_code=500, detail=f"Tokenizer error: {e}")
 
         try:
-            logger.debug("Generating diet recommendation from model...")
-            output_ids = model.generate(
-                input_data["input_ids"], 
-                attention_mask=input_data["attention_mask"], 
-                max_length=1000,
-                temperature=0.7, 
-                top_p=0.9,
-                pad_token_id=tokenizer.eos_token_id 
-            )
+            with torch.no_grad():
+                output_ids = model.generate(
+                    input_data["input_ids"],
+                    attention_mask=input_data["attention_mask"],
+                    max_new_tokens=500,  
+                    temperature=0.7,
+                    top_p=0.9,
+                    num_return_sequences=1, 
+                    pad_token_id=tokenizer.eos_token_id,
+                    use_cache=True  
+                )
         except Exception as e:
             logger.error(f"Model generation error: {e}")
             raise HTTPException(status_code=500, detail=f"Model generation error: {e}")
 
         response = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+        logger.info(response)
+        
+        response = response.split("assistant")[1].strip()
 
-        lines = response.strip().split("\n")
-        parsed_data = {}
-        for line in lines:
-            if ":" in line:
-                key, value = line.split(":", 1)
-                parsed_data[key.strip().lower()] = value.strip()
+        # Attempt to parse the JSON response
+        try:
+            if "```json" in response:
+                response = response.split("```json")[1].split("```")[0].strip()
 
-        parsed_data = DietPlanResponse(**parsed_data).model_dump()
-        recommended_meal = parsed_data.get(meal_type, "")
+            meal_plans = json.loads(response)["meal_plans"]
+            logger.debug(f"Meal plans extracted: {meal_plans}")
 
-        image_path = download_meal_image(meal_name=recommended_meal)
-        logger.info(f"Meal recommendation generated successfully: {recommended_meal}")
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON response: {e}")
+            logger.error(f"Raw response content: {response}")
+            raise HTTPException(status_code=500, detail="Failed to parse JSON response. Ensure the model outputs valid JSON.")
+        
+        except KeyError as e:
+            logger.error(f"Key 'meal_plans' not found in JSON response: {e}")
+            logger.error(f"Raw response content: {response}")
+            raise HTTPException(status_code=500, detail="Invalid JSON format. 'meal_plans' key is missing.")
+
+        # Extract all meal options for the current meal type
+        meal_options = [plan[meal_type] for plan in meal_plans if meal_type in plan]
+        if not meal_options:
+            logger.error(f"No meal options found for type: {meal_type}")
+            raise HTTPException(status_code=500, detail=f"No meal options found for type: {meal_type}")
+
+        # Filter or replace non-vegetarian items with vegetarian alternatives if the user is vegetarian
+        if diet_preference == "Vegetarian":
+            meal_options = vegetarian_filter(meal_options)
+            logger.debug(f"Applied vegetarian filter, resulting options: {meal_options}")
+
+        meal_images = []
+        for meal in meal_options:
+            try:
+                image_path = download_meal_image(meal_name=meal)
+                meal_images.append({
+                    "meal_name": meal,
+                    "image_path": f"../{image_path}"
+                })
+            except Exception as e:
+                logger.error(f"Failed to download image for meal {meal}: {e}")
+                meal_images.append({
+                    "meal_name": meal,
+                    "image_path": "../static/images/default_meal.jpg"  # Use a default image path
+                })
+
+        logger.info(f"Meal recommendations generated successfully for {meal_type}")
 
         return {
             "current_time": f"{current_hour}:{current_minute}",
-            "image_path": f"../{image_path}",
             "meal_type": meal_type,
-            "recommended_diet": recommended_meal
+            "meal_options": meal_images  # Return all meal options with their images
         }
 
+    except HTTPException as e:
+        raise e  # Re-raise HTTPException to return the appropriate response
     except Exception as e:
-        logger.error(f"Unexpected error occurred: {e}")
-        raise HTTPException(status_code=500, detail=f"An error occurred: {e}") from e
+        logger.error(f"Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/log-meal/")
 def log_your_meal(
@@ -350,6 +428,7 @@ def log_your_meal(
     request: Request,  
     db: sqlite3.Connection = Depends(get_db)
 ):
+    logger.info(logmeal)
     try:
         user_id = request.cookies.get("user_id")
         if not user_id:
@@ -360,6 +439,7 @@ def log_your_meal(
         recommended_diet = logmeal.recommended_diet
         current_date = time.strftime("%Y-%m-%d")
         macro_nutrients = get_macronutrients(meal_type=meal_type, recommended_diet=recommended_diet)
+        logger.info(f"Macronutrients for {meal_type}: {macro_nutrients}")
 
         if macro_nutrients:
             cursor = db.cursor()
