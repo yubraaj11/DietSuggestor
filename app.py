@@ -1,7 +1,7 @@
 import os
 from time import time
 import time
-from typing import Literal
+from typing import Literal, List, Dict
 import sqlite3
 import uuid
 import json
@@ -23,7 +23,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from database import get_db_connection
 from download_image import download_meal_image
-from utils import vegetarian_filter
+from utils import vegetarian_filter, fetch_nutrition_data
 
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -91,6 +91,9 @@ class UserResponse(BaseModel):
     gender: Literal["male", "female"]
     height: int
 
+class RecipeRequest(BaseModel):
+    ingredients: List[str]
+
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
@@ -137,7 +140,7 @@ suggest at least three different balanced meal plans for a day. Each meal plan s
             "snack": "Example snack 2",
             "dinner": "Example dinner 2"
         },
-        {
+                {
             "breakfast": "Example breakfast 3",
             "lunch": "Example lunch 3",
             "snack": "Example snack 3",
@@ -158,11 +161,38 @@ Dietary Preference: {user_request.diet_preference}
 Daily Calorie Target: {user_request.daily_calorie_target} kcal"""},
     ]
 
-    chat_prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    diet_prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     
-    return chat_prompt
+    return diet_prompt
 
 
+def generate_recipe_prompt(ingredients):
+    """Generates a chat template prompt for recipe generation with JSON response format."""
+    
+    system_prompt = """
+        Act as a chef. Create a dish name and provide clear, detailed step-by-step instructions based on the given ingredients. 
+        Use only the listed ingredients as core components, but assume basic pantry items (e.g., salt, pepper, oil) if needed. 
+        Respond in JSON format with 'dish_name' and 'steps'.
+
+    **Example Response Format:**
+    {
+        "dish_name": "<dish name>",
+        "steps": [
+            "<step 1>",
+            "<step 2>",
+            "<step 3>",
+            ...
+        ]
+    }
+        """
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"Ingredients: {', '.join(ingredients)}"}
+    ]
+
+    recipe_prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    return recipe_prompt
 
 
 def diet_via_time(tm: int):
@@ -178,31 +208,6 @@ def diet_via_time(tm: int):
     else:
         return None
 
-def get_macronutrients(
-    meal_type: str,
-    recommended_diet: str,
-    lookup_df: pd.DataFrame = lookup_df
-):
-    """
-    Look up macronutrients for the predicted diet from the lookup table.
-    """
-    if lookup_df is None:
-        raise ValueError("Lookup DataFrame is required.")
-
-    cols_to_return = ["Protein", "Fat", "Fiber", "Carbohydrates", "Calories"]
-
-    column_name = f"{meal_type.capitalize()} Suggestion"
-
-    if column_name not in lookup_df.columns:
-        raise KeyError(f"Column '{column_name}' not found in the lookup DataFrame.")
-
-    diet_info = lookup_df[lookup_df[column_name] == recommended_diet]
-
-    if not diet_info.empty:
-        logger.debug(f"Macronutrients found for {meal_type}: {diet_info[cols_to_return].to_dict(orient='records')[0]}")
-        return diet_info[cols_to_return].to_dict(orient="records")[0]  
-    else:
-        return None    
 
 @app.get("/")
 def home(request: Request):
@@ -348,7 +353,7 @@ def get_recommendation(
                 output_ids = model.generate(
                     input_data["input_ids"],
                     attention_mask=input_data["attention_mask"],
-                    max_new_tokens=500,  
+                    max_new_tokens=1000,  
                     temperature=0.7,
                     top_p=0.9,
                     num_return_sequences=1, 
@@ -364,7 +369,6 @@ def get_recommendation(
         
         response = response.split("assistant")[1].strip()
 
-        # Attempt to parse the JSON response
         try:
             if "```json" in response:
                 response = response.split("```json")[1].split("```")[0].strip()
@@ -382,13 +386,11 @@ def get_recommendation(
             logger.error(f"Raw response content: {response}")
             raise HTTPException(status_code=500, detail="Invalid JSON format. 'meal_plans' key is missing.")
 
-        # Extract all meal options for the current meal type
         meal_options = [plan[meal_type] for plan in meal_plans if meal_type in plan]
         if not meal_options:
             logger.error(f"No meal options found for type: {meal_type}")
             raise HTTPException(status_code=500, detail=f"No meal options found for type: {meal_type}")
 
-        # Filter or replace non-vegetarian items with vegetarian alternatives if the user is vegetarian
         if diet_preference == "Vegetarian":
             meal_options = vegetarian_filter(meal_options)
             logger.debug(f"Applied vegetarian filter, resulting options: {meal_options}")
@@ -413,19 +415,19 @@ def get_recommendation(
         return {
             "current_time": f"{current_hour}:{current_minute}",
             "meal_type": meal_type,
-            "meal_options": meal_images  # Return all meal options with their images
+            "meal_options": meal_images  
         }
 
     except HTTPException as e:
-        raise e  # Re-raise HTTPException to return the appropriate response
+        raise e  
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/log-meal/")
 def log_your_meal(
-    logmeal: LogMeal, 
-    request: Request,  
+    logmeal: LogMeal,
+    request: Request,
     db: sqlite3.Connection = Depends(get_db)
 ):
     logger.info(logmeal)
@@ -438,7 +440,7 @@ def log_your_meal(
         meal_type = logmeal.meal_type
         recommended_diet = logmeal.recommended_diet
         current_date = time.strftime("%Y-%m-%d")
-        macro_nutrients = get_macronutrients(meal_type=meal_type, recommended_diet=recommended_diet)
+        macro_nutrients = fetch_nutrition_data(recommended_diet)
         logger.info(f"Macronutrients for {meal_type}: {macro_nutrients}")
 
         if macro_nutrients:
@@ -523,6 +525,123 @@ def dashboard_page(request: Request, db: sqlite3.Connection = Depends(get_db)):
         "dashboard.html", {"request": request, "nutrition_data": json.dumps(meal_data)}
     )
 
+
+
+@app.get("/craft-recipe/")
+def craft_recipe_template(request: Request):
+    user_id = request.cookies.get("user_id")
+    if user_id:
+        logger.info("User logged in. Showing recipe page.")
+        return templates.TemplateResponse("craft_recipe.html", {"request": request})
+    else:
+        logger.warning("Unauthorized access attempt - no user_id found in cookies")
+        return RedirectResponse(url="/", status_code=303)
+
+@app.post("/craft-recipe/")
+async def craft_recipe(
+    request: Request,
+    recipe_request: RecipeRequest,
+    db: sqlite3.Connection = Depends(get_db)
+):
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        logger.warning("Unauthorized access attempt - no user_id found in cookies")
+        return RedirectResponse(url="/", status_code=303)
+    
+    try:
+        
+        recipe_prompt = generate_recipe_prompt(ingredients=recipe_request.ingredients)
+        
+        logger.debug(f"Generating recipe for ingredients: {recipe_request.ingredients}")
+        
+        try:
+            logger.debug("Tokenizing prompt...")
+            input_data = tokenizer(
+                recipe_prompt, 
+                return_tensors="pt", 
+                padding="longest", 
+                truncation=True
+            ).to(device=DEVICE)
+        except Exception as e:
+            logger.error(f"Tokenizer error: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+                detail=f"Failed to process ingredients: {str(e)}"
+            )
+        
+        try:
+            with torch.no_grad():
+                output_ids = model.generate(
+                    input_data["input_ids"],
+                    attention_mask=input_data["attention_mask"],
+                    max_new_tokens=1000,  
+                    temperature=0.7,
+                    top_p=0.9,
+                    num_return_sequences=1, 
+                    pad_token_id=tokenizer.eos_token_id,
+                    use_cache=True  
+                )
+        except RuntimeError as e:
+            if "CUDA out of memory" in str(e):
+                logger.error(f"CUDA out of memory error: {str(e)}")
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Server is currently overloaded. Please try again later."
+                )
+            else:
+                logger.error(f"Model generation error: {str(e)}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to generate recipe. Please try again."
+                )
+        except Exception as e:
+            logger.error(f"Unexpected error during model generation: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="An unexpected error occurred. Please try again."
+            )
+        
+        response = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+        logger.debug(f"Raw model response: {response}")
+        
+        try:
+            if "assistant" in response:
+                response = response.split("assistant")[1].strip()
+            
+            if "```json" in response:
+                response = response.split("```json")[1].split("```")[0].strip()
+            elif "```" in response: 
+                response = response.split("```")[1].split("```")[0].strip()
+            
+            recipe = json.loads(response)
+            logger.info(f"Parsed recipe: {recipe}")
+            
+            if "dish_name" not in recipe or "steps" not in recipe:
+                logger.warning(f"Incomplete recipe generated: {recipe}")
+                raise HTTPException(
+                    status_code=422,
+                    detail="Generated recipe is incomplete. Please try again with different ingredients."
+                )
+
+            return {
+                "dish_name": recipe.get("dish_name"), 
+                "steps": recipe.get("steps"),
+                "ingredients": recipe_request.ingredients
+            }
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON parsing error: {str(e)}, Response: {response}")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to parse the generated recipe. Please try again."
+            )
+            
+    except Exception as e:
+        logger.error(f"Unexpected error in craft_recipe: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="An unexpected error occurred. Please try again later."
+        )
 
 @app.get("/logout/")
 def logout():

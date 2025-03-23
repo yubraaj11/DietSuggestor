@@ -32,7 +32,6 @@ document.getElementById("diet-form").addEventListener("submit", function (event)
         
         const mealOptionsContainer = document.getElementById("meal-options-container");
         
-        // Create and display each meal option
         mealOptions.forEach(option => {
             const mealCard = document.createElement("div");
             mealCard.className = "meal-card";
