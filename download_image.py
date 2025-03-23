@@ -7,7 +7,6 @@ from bs4 import BeautifulSoup
 def download_meal_image(meal_name, download_folder="static/images"):
     image_path = os.path.join(download_folder, f"{meal_name}.jpg")
     
-    # Check if image already exists
     if os.path.exists(image_path):
         return image_path
     
