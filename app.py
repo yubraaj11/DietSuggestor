@@ -194,6 +194,31 @@ def generate_recipe_prompt(ingredients):
     recipe_prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     return recipe_prompt
 
+def generate_macro_prompt(meal):
+    """Generates a chat template prompt for macronutrient estimation with JSON response format."""
+    
+    system_prompt = """
+        Act as a nutritionist. Based on the given meal, estimate the total macronutrient breakdown. 
+        Provide values for Calories in kcal, and remaining Protein, Carbohydrates, Fat, and Fiber in grams. 
+        Respond in JSON format with the following keys: 'Calories', 'Protein', 'Carbohydrates', 'Fat', and 'Fiber'.
+
+    **Example Response Format:**
+    {
+        "Calories": <total_calories_in_kcal>,
+        "Protein": <total_protein_in_grams>,
+        "Carbohydrates": <total_carbohydrates_in_grams>,
+        "Fat": <total_fat_in_grams>,
+        "Fiber": <total_fiber_in_grams>
+    }
+    """
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"Meal: {meal}"}
+    ]
+
+    macro_prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    return macro_prompt
 
 def diet_via_time(tm: int):
     """Function to return meal type based on time of the day."""
@@ -261,7 +286,7 @@ def register(
     db: sqlite3.Connection = Depends(get_db)
 ):
     if password != confirm_password:
-        logger,error("Passwords do not match!")
+        logger.error("Passwords do not match!")
         return {"error": "Passwords do not match!"}
 
     hashed_password = hash_password(password)
@@ -440,8 +465,51 @@ def log_your_meal(
         meal_type = logmeal.meal_type
         recommended_diet = logmeal.recommended_diet
         current_date = time.strftime("%Y-%m-%d")
-        macro_nutrients = fetch_nutrition_data(recommended_diet)
-        logger.info(f"Macronutrients for {meal_type}: {macro_nutrients}")
+        macro_prompt = generate_macro_prompt(meal=recommended_diet)
+        try:
+            logger.debug("Tokenizing prompt...")
+            input_data = tokenizer(macro_prompt, return_tensors="pt", padding="longest", truncation=True).to(device=DEVICE)
+        except Exception as e:
+            logger.error(f"Tokenizer error: {e}")
+            raise HTTPException(status_code=500, detail=f"Tokenizer error: {e}")
+
+        try:
+            with torch.no_grad():
+                output_ids = model.generate(
+                    input_data["input_ids"],
+                    attention_mask=input_data["attention_mask"],
+                    max_new_tokens=300,  
+                    temperature=0.7,
+                    top_p=0.9,
+                    num_return_sequences=1, 
+                    pad_token_id=tokenizer.eos_token_id,
+                    use_cache=True  
+                )
+        except Exception as e:
+            logger.error(f"Model generation error: {e}")
+            raise HTTPException(status_code=500, detail=f"Model generation error: {e}")
+
+        response = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+        logger.info(response)
+        
+        response = response.split("assistant")[1].strip()
+
+        try:
+            if "```json" in response:
+                response = response.split("```json")[1].split("```")[0].strip()
+
+            macro_nutrients = json.loads(response)
+            logger.debug(f"Meal plans extracted: {macro_nutrients}")
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON response: {e}")
+            logger.error(f"Raw response content: {response}")
+            raise HTTPException(status_code=500, detail="Failed to parse JSON response. Ensure the model outputs valid JSON.")
+        
+        except KeyError as e:
+            logger.error(f"Key 'meal_plans' not found in JSON response: {e}")
+            logger.error(f"Raw response content: {response}")
+            raise HTTPException(status_code=500, detail="Invalid JSON format. 'meal_plans' key is missing.")
 
         if macro_nutrients:
             cursor = db.cursor()
