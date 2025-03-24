@@ -69,6 +69,8 @@ document.getElementById("diet-form").addEventListener("submit", function (event)
 
 document.addEventListener("click", function(event) {
     if (event.target && event.target.id === "log-meal-button") {
+        document.getElementById("loader").style.display = "block";
+        
         const mealType = event.target.getAttribute("data-meal-type");
         const recommendedDiet = event.target.getAttribute("data-recommended-diet");
         
@@ -86,6 +88,9 @@ document.addEventListener("click", function(event) {
         .then(data => {
             window.location.href = "/dashboard";
         })
-        .catch(error => console.error("Error:", error));
+        .catch(error => {
+            console.error("Error:", error);
+            document.getElementById("loader").style.display = "none";
+        });
     }
 });
