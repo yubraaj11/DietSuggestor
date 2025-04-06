@@ -23,7 +23,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from database import get_db_connection
 from download_image import download_meal_image
-from utils import vegetarian_filter, fetch_nutrition_data
+from utils import vegetarian_filter
 
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -153,13 +153,13 @@ suggest at least three different balanced meal plans for a day. Each meal plan s
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": f"""Age: {user_request.age}
-Gender: {user_request.gender}
-Height: {user_request.height} cm
-Weight: {user_request.weight} kg
-Activity Level: {user_request.activity_level}
-Dietary Preference: {user_request.diet_preference}
-Daily Calorie Target: {user_request.daily_calorie_target} kcal"""},
-    ]
+                                        Gender: {user_request.gender}
+                                        Height: {user_request.height} cm
+                                        Weight: {user_request.weight} kg
+                                        Activity Level: {user_request.activity_level}
+                                        Dietary Preference: {user_request.diet_preference}
+                                        Daily Calorie Target: {user_request.daily_calorie_target} kcal"""},
+                                            ]
 
     diet_prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     
