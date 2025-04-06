@@ -633,7 +633,7 @@ async def craft_recipe(
         except Exception as e:
             logger.error(f"Tokenizer error: {str(e)}")
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+                status_code=500, 
                 detail=f"Failed to process ingredients: {str(e)}"
             )
         
@@ -653,19 +653,19 @@ async def craft_recipe(
             if "CUDA out of memory" in str(e):
                 logger.error(f"CUDA out of memory error: {str(e)}")
                 raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    status_code=503,
                     detail="Server is currently overloaded. Please try again later."
                 )
             else:
                 logger.error(f"Model generation error: {str(e)}")
                 raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    status_code=500,
                     detail="Failed to generate recipe. Please try again."
                 )
         except Exception as e:
             logger.error(f"Unexpected error during model generation: {str(e)}")
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status_code=500,
                 detail="An unexpected error occurred. Please try again."
             )
         
