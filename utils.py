@@ -1,11 +1,3 @@
-import os 
-import requests
-from dotenv import load_dotenv
-
-load_dotenv()
-
-API_NINJA = os.getenv("API_NINJA")
-
 def vegetarian_filter(meal_options):
     """
     Filter or replace non-vegetarian meals with vegetarian alternatives.
@@ -68,37 +60,3 @@ def vegetarian_filter(meal_options):
     
     return vegetarian_options
 
-
-
-def fetch_nutrition_data(query):
-    """Fetches nutrition data from the API."""
-    api_url = f'https://api.api-ninjas.com/v1/nutrition?query={query}'
-    response = requests.get(api_url, headers={'X-Api-Key': API_NINJA})
-
-    if response.status_code == requests.codes.ok:
-        return response.json()
-    else:
-        print("Error:", response.status_code, response.text)
-        return None
-
-def calculate_macronutrients(data):
-    """Calculates total macronutrient values from API response."""
-    macro_nutrients = {
-        "Calories": 0,
-        "Protein": 0,
-        "Carbohydrates": 0,
-        "Fat": 0,
-        "Fiber": 0
-    }
-
-    if not data:
-        return macro_nutrients
-
-    for item in data:
-        macro_nutrients["Calories"] += item.get("calories", 0) if isinstance(item.get("calories"), (int, float)) else 0
-        macro_nutrients["Protein"] += item.get("protein_g", 0) if isinstance(item.get("protein_g"), (int, float)) else 0
-        macro_nutrients["Carbohydrates"] += item.get("carbohydrates_total_g", 0) if isinstance(item.get("carbohydrates_total_g"), (int, float)) else 0
-        macro_nutrients["Fat"] += item.get("fat_total_g", 0) if isinstance(item.get("fat_total_g"), (int, float)) else 0
-        macro_nutrients["Fiber"] += item.get("fiber_g", 0) if isinstance(item.get("fiber_g"), (int, float)) else 0
-
-    return macro_nutrients
