@@ -45,6 +45,17 @@ pip install -r requirements.txt
 uvicorn app:app --reload
 ```
 ---
+#### Dockerize
+
+```bash
+sudo docker build -t <image_name> .
+```
+
+```bash
+sudo docker run --name <container_name> -p 8000:8000 <image_name>
+```
+
+---
 ### Sample Screenshots
 
 - Login Page
