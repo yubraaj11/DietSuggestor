@@ -18,10 +18,10 @@ cd DietSuggestor
 #### 2. Create Virtual Env
 ##### a. Conda
 ```bash
-conda create -n dietsuggestor python=3.10
+conda create -n <name> python=3.11
 
 # activate 
-conda activate dietsuggestor
+conda activate <name>
 ```
 
 ##### b. Venv
