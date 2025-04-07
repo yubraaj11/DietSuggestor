@@ -28,13 +28,10 @@ from utils import vegetarian_filter
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-LOOKUP_CSV_FILE_PATH = "data/Food_and_Nutrition__.csv"
-MODEL_CHECKPOINT = "syubraj/DietRecommender_4bit_Qwen2.5-0.5B"
+MODEL_CHECKPOINT = "Raasmii/FitFoodie_4bit_Qwen2.5-0.5B"
 
 torch.cuda.empty_cache()
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
-lookup_df = pd.read_csv(LOOKUP_CSV_FILE_PATH)
 
 model = AutoModelForCausalLM.from_pretrained(MODEL_CHECKPOINT)
 model.to(DEVICE)
